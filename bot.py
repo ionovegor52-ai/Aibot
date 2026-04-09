@@ -14,7 +14,7 @@ import socket
 # ========== ИСПРАВЛЕНИЕ DNS ДЛЯ RENDER ==========
 # Принудительно используем Google DNS
 import aiohttp.resolver
-
+ 
 async def create_resolver():
     resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
     connector = aiohttp.TCPConnector(resolver=resolver)
