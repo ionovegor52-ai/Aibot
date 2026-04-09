@@ -9,23 +9,13 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
-import socket
-
-# ========== ИСПРАВЛЕНИЕ DNS ДЛЯ RENDER ==========
-# Принудительно используем Google DNS
-import aiohttp.resolver
- 
-async def create_resolver():
-    resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
-    connector = aiohttp.TCPConnector(resolver=resolver)
-    return connector
 
 # ========== КОНФИГ ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 RENDER_URL = os.environ.get("RENDER_URL", "https://aibot-f7s6.onrender.com")
 
-# Рабочие модели OpenRouter
+# Только проверенные рабочие модели
 MODELS = {
     "openai/gpt-4o": "GPT-4o 🌟 (самая умная)",
     "deepseek/deepseek-chat": "DeepSeek 🧠 (логика)"
@@ -42,7 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     total_requests INTEGER DEFAULT 0,
     current_model TEXT DEFAULT 'openai/gpt-4o',
     temperature REAL DEFAULT 0.7,
-    system_prompt TEXT DEFAULT 'Ты полезный ассистент',
+    system_prompt TEXT DEFAULT 'Ты полезный ассистент. Отвечай на русском языке.',
     joined_date TEXT
 )
 """)
@@ -163,9 +153,12 @@ async def ask_ai(user_id, prompt):
                     add_to_history(user_id, "assistant", response)
                     return response, None
                 else:
-                    return None, f"❌ Ошибка API: {resp.status}"
+                    error_text = await resp.text()
+                    return None, f"❌ Ошибка API: {resp.status}\n{error_text[:100]}"
+    except asyncio.TimeoutError:
+        return None, "❌ Превышено время ожидания. Попробуйте ещё раз."
     except Exception as e:
-        return None, f"❌ Ошибка: {str(e)}"
+        return None, f"❌ Ошибка: {str(e)[:100]}"
 
 # ========== КЛАВИАТУРЫ ==========
 def main_menu(user_id):
@@ -206,12 +199,9 @@ async def start_command(message: Message):
     
     await message.answer(
         "🤖 *ИИ-ассистент на OpenRouter*\n\n"
-        "Я общаюсь с разными моделями ИИ:\n"
-        "• GPT-4o — самый умный\n"
-        "• Claude — отличный для кода\n"
-        "• Gemini — быстрый и бесплатный\n"
-        "• Mistral — бесплатный\n"
-        "• DeepSeek — сильная логика\n\n"
+        "Я общаюсь с топовыми моделями ИИ:\n"
+        "• GPT-4o — самый умный, универсальный\n"
+        "• DeepSeek — отличная логика, математика\n\n"
         "🎁 У вас есть *5 бесплатных запросов*!\n"
         "После этого напишите /reset, чтобы получить ещё 5.\n\n"
         "👇 Выберите действие:",
@@ -259,7 +249,8 @@ async def start_chat(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         f"💬 *Режим чата с ИИ*\n\n"
         f"📊 Осталось запросов: {user_data[0]}\n"
-        f"🤖 Модель: {MODELS.get(user_data[2], user_data[2])}\n\n"
+        f"🤖 Модель: {MODELS.get(user_data[2], user_data[2])}\n"
+        f"🌡️ Температура: {user_data[3]}\n\n"
         f"Просто напишите свой вопрос.\n"
         f"Для выхода нажмите «🔙 Выход»",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Выход", callback_data="back")]]),
@@ -288,19 +279,24 @@ async def process_chat_message(message: Message, state: FSMContext):
         await message.answer(error)
     else:
         user_data = get_user(user_id)
-        await message.answer(
-            f"{response}\n\n"
-            f"📊 Осталось запросов: {user_data[0]}",
-            parse_mode="Markdown"
-        )
+        # Если ответ слишком длинный, разбиваем
+        if len(response) > 4000:
+            for i in range(0, len(response), 4000):
+                await message.answer(response[i:i+4000])
+        else:
+            await message.answer(
+                f"{response}\n\n"
+                f"📊 Осталось запросов: {user_data[0]}",
+                parse_mode="Markdown"
+            )
 
 @dp.callback_query(F.data == "models")
 async def show_models(callback: CallbackQuery):
     await callback.message.edit_text(
         "🤖 *Выберите модель ИИ:*\n\n"
         "Каждая модель имеет свои особенности:\n"
-        "• GPT-4o — универсальная, самая умная\n
-        "• DeepSeek — сильная в математике\n\n"
+        "• GPT-4o — универсальная, самая умная, подходит для любых задач\n"
+        "• DeepSeek — отличная логика, сильна в математике и программировании\n\n"
         "👇 Нажмите на модель для выбора:",
         reply_markup=models_keyboard(),
         parse_mode="Markdown"
@@ -329,9 +325,10 @@ async def show_balance(callback: CallbackQuery):
     text = f"💰 *Ваш баланс*\n\n"
     text += f"📊 Осталось запросов: {user_data[0]}\n"
     text += f"📈 Всего использовано: {user_data[1]}\n"
-    text += f"🎁 Бесплатных запросов: 5\n\n"
+    text += f"🎁 Бесплатных запросов за раз: 5\n\n"
     text += f"🤖 Текущая модель: {MODELS.get(user_data[2], user_data[2])}\n"
-    text += f"🌡️ Температура: {user_data[3]}\n\n"
+    text += f"🌡️ Температура: {user_data[3]}\n"
+    text += f"🎭 Системный промпт: {user_data[4][:50]}...\n\n"
     text += f"Когда закончатся запросы, напишите /reset"
     
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=main_menu(user_id))
@@ -352,10 +349,13 @@ async def show_history(callback: CallbackQuery):
         await callback.answer()
         return
     
-    text = "📋 *История диалога:*\n\n"
+    text = "📋 *Последние сообщения:*\n\n"
     for i, (role, content) in enumerate(history[-6:], 1):
         icon = "👤" if role == "user" else "🤖"
-        text += f"{icon} {content[:100]}...\n\n"
+        text += f"{icon} {content[:100]}"
+        if len(content) > 100:
+            text += "..."
+        text += "\n\n"
     
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=main_menu(user_id))
     await callback.answer()
@@ -379,8 +379,8 @@ async def show_settings(callback: CallbackQuery):
     user_data = get_user(user_id)
     
     text = f"⚙️ *Настройки*\n\n"
-    text += f"🎭 Системный промпт: {user_data[4][:50]}...\n"
-    text += f"🌡️ Температура: {user_data[3]} (0.1 — точный, 1.5 — креативный)\n\n"
+    text += f"🎭 *Системный промпт:*\n`{user_data[4][:80]}{'...' if len(user_data[4]) > 80 else ''}`\n\n"
+    text += f"🌡️ *Температура:* {user_data[3]} (0.1 — точный, 1.5 — креативный)\n\n"
     text += f"Выберите, что хотите изменить:"
     
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=settings_keyboard())
@@ -396,7 +396,11 @@ async def set_prompt_start(callback: CallbackQuery, state: FSMContext):
         f"🎭 *Текущий системный промпт:*\n"
         f"`{user_data[4]}`\n\n"
         f"Введите новый системный промпт.\n\n"
-        f"*Пример:* «Ты эксперт по Python» или «Ты дружелюбный помощник»",
+        f"*Примеры:*\n"
+        f"• «Ты эксперт по Python»\n"
+        f"• «Ты дружелюбный помощник»\n"
+        f"• «Ты отвечаешь кратко и по делу»\n\n"
+        f"❌ Нажмите «Отмена» для выхода",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Отмена", callback_data="settings")]])
     )
@@ -409,7 +413,7 @@ async def set_prompt(message: Message, state: FSMContext):
     
     await message.answer(
         f"✅ *Системный промпт обновлён!*\n\n"
-        f"Новый промпт: {message.text[:100]}",
+        f"Новый промпт: {message.text[:100]}{'...' if len(message.text) > 100 else ''}",
         parse_mode="Markdown",
         reply_markup=main_menu(user_id)
     )
@@ -424,10 +428,11 @@ async def set_temperature_start(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         f"🌡️ *Текущая температура:* {user_data[3]}\n\n"
         f"Введите новое значение от 0.1 до 1.5:\n"
-        f"• 0.1 — точные, фактические ответы\n"
-        f"• 0.7 — баланс (по умолчанию)\n"
-        f"• 1.5 — креативные, неожиданные ответы\n\n"
-        f"Пример: `0.8`",
+        f"• `0.1` — точные, фактические ответы\n"
+        f"• `0.7` — баланс (по умолчанию)\n"
+        f"• `1.5` — креативные, неожиданные ответы\n\n"
+        f"*Пример:* `0.8`\n\n"
+        f"❌ Нажмите «Отмена» для выхода",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Отмена", callback_data="settings")]])
     )
@@ -436,7 +441,7 @@ async def set_temperature_start(callback: CallbackQuery, state: FSMContext):
 @dp.message(SettingsState.waiting_for_temperature)
 async def set_temperature(message: Message, state: FSMContext):
     try:
-        temp = float(message.text)
+        temp = float(message.text.replace(",", "."))
         if temp < 0.1 or temp > 1.5:
             raise ValueError
     except:
@@ -448,7 +453,8 @@ async def set_temperature(message: Message, state: FSMContext):
     
     await message.answer(
         f"✅ *Температура обновлена!*\n\n"
-        f"Новое значение: {temp}",
+        f"Новое значение: {temp}\n"
+        f"Теперь ИИ будет {'точнее' if temp < 0.7 else 'креативнее' if temp > 0.7 else 'сбалансированно'} отвечать.",
         parse_mode="Markdown",
         reply_markup=main_menu(user_id)
     )
@@ -462,19 +468,17 @@ async def show_help(callback: CallbackQuery):
         "/start — Главное меню\n"
         "/reset — Получить 5 новых запросов\n\n"
         "📌 *Что умею:*\n"
-        "• 💬 Общаться с разными ИИ-моделями\n"
+        "• 💬 Общаться с топовыми ИИ-моделями\n"
         "• 🤖 Выбирать модель под задачу\n"
         "• 📋 Сохранять историю диалога\n"
         "• 🎭 Настраивать системный промпт\n"
         "• 🌡️ Регулировать креативность\n\n"
         "📌 *Доступные модели:*\n"
         "• GPT-4o — универсальная (рекомендую)\n"
-        "• Claude — программирование\n"
-        "• Gemini — быстрая и бесплатная\n"
-        "• Mistral — бесплатная\n"
         "• DeepSeek — математика и логика\n\n"
         "🎁 У вас 5 бесплатных запросов!\n"
-        "После этого напишите /reset"
+        "После этого напишите /reset\n\n"
+        "👨‍💻 Создано для портфолио"
     )
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=main_menu(callback.from_user.id))
     await callback.answer()
@@ -485,13 +489,13 @@ async def health_check(request):
 
 async def self_ping():
     while True:
-        await asyncio.sleep(600)
+        await asyncio.sleep(600)  # каждые 10 минут
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(RENDER_URL, timeout=10) as resp:
                     print(f"[SELF-PING] {resp.status} - {datetime.now().strftime('%H:%M:%S')}")
-        except:
-            pass
+        except Exception as e:
+            print(f"[SELF-PING] Ошибка: {e}")
 
 async def start_web():
     app = web.Application()
@@ -508,6 +512,7 @@ async def start_web():
 async def main():
     print("✅ ИИ-бот запущен!")
     print(f"📍 Адрес: {RENDER_URL}")
+    print(f"🤖 Доступные модели: {', '.join(MODELS.keys())}")
     await start_web()
     asyncio.create_task(self_ping())
     print("🔄 Самопинг (каждые 10 минут) запущен")
