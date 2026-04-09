@@ -2,7 +2,6 @@ import asyncio
 import aiohttp
 import sqlite3
 import os
-import json
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -10,11 +9,21 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiohttp import web
+import socket
+
+# ========== ИСПРАВЛЕНИЕ DNS ДЛЯ RENDER ==========
+# Принудительно используем Google DNS
+import aiohttp.resolver
+
+async def create_resolver():
+    resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
+    connector = aiohttp.TCPConnector(resolver=resolver)
+    return connector
 
 # ========== КОНФИГ ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-RENDER_URL = os.environ.get("RENDER_URL", "https://ai-bot.onrender.com")
+RENDER_URL = os.environ.get("RENDER_URL", "https://aibot-f7s6.onrender.com")
 
 # Доступные модели OpenRouter
 MODELS = {
