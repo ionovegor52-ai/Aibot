@@ -299,10 +299,7 @@ async def show_models(callback: CallbackQuery):
     await callback.message.edit_text(
         "🤖 *Выберите модель ИИ:*\n\n"
         "Каждая модель имеет свои особенности:\n"
-        "• GPT-4o — универсальная, самая умная\n"
-        "• Claude — отлична для программирования\n"
-        "• Gemini — быстрая и бесплатная\n"
-        "• Mistral — бесплатная, лёгкая\n"
+        "• GPT-4o — универсальная, самая умная\n
         "• DeepSeek — сильная в математике\n\n"
         "👇 Нажмите на модель для выбора:",
         reply_markup=models_keyboard(),
