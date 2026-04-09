@@ -25,13 +25,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 RENDER_URL = os.environ.get("RENDER_URL", "https://aibot-f7s6.onrender.com")
 
-# Доступные модели OpenRouter
+# Рабочие модели OpenRouter
 MODELS = {
     "openai/gpt-4o": "GPT-4o 🌟 (самая умная)",
-    "anthropic/claude-3.5-sonnet": "Claude 3.5 Sonnet 💻 (код)",
-    "google/gemini-2.0-flash": "Gemini Flash ⚡ (быстрая)",
-    "mistralai/mistral-7b": "Mistral 7B 📚 (бесплатно)",
-    "deepseek/deepseek-r1": "DeepSeek R1 🧠 (логика)"
+    "deepseek/deepseek-chat": "DeepSeek 🧠 (логика)"
 }
 
 # База данных
