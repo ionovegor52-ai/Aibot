@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import aiohttp
 import sqlite3
 import os
@@ -13,7 +13,7 @@ from aiohttp import web
 
 # ========== КОНФИГ ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")  # Получить на openrouter.ai/keys
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 RENDER_URL = os.environ.get("RENDER_URL", "https://ai-bot.onrender.com")
 
 # Доступные модели OpenRouter
@@ -57,6 +57,9 @@ conn.commit()
 class SettingsState(StatesGroup):
     waiting_for_system_prompt = State()
     waiting_for_temperature = State()
+
+class ChatState(StatesGroup):
+    waiting_for_message = State()
 
 # Инициализация
 bot = Bot(token=BOT_TOKEN)
@@ -149,9 +152,7 @@ async def ask_ai(user_id, prompt):
                 if resp.status == 200:
                     data = await resp.json()
                     response = data["choices"][0]["message"]["content"]
-                    # Списываем запрос
                     use_request(user_id)
-                    # Сохраняем в историю
                     add_to_history(user_id, "user", prompt)
                     add_to_history(user_id, "assistant", response)
                     return response, None
@@ -248,7 +249,7 @@ async def start_chat(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     
-    await state.set_state(WeatherState.waiting_for_message)
+    await state.set_state(ChatState.waiting_for_message)
     await callback.message.edit_text(
         f"💬 *Режим чата с ИИ*\n\n"
         f"📊 Осталось запросов: {user_data[0]}\n"
@@ -260,7 +261,7 @@ async def start_chat(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-@dp.message(WeatherState.waiting_for_message)
+@dp.message(ChatState.waiting_for_message)
 async def process_chat_message(message: Message, state: FSMContext):
     user_id = message.from_user.id
     user_data = get_user(user_id)
@@ -273,16 +274,13 @@ async def process_chat_message(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    # Отправляем индикатор набора
     await message.bot.send_chat_action(message.chat.id, "typing")
     
-    # Запрашиваем ответ у ИИ
     response, error = await ask_ai(user_id, message.text)
     
     if error:
         await message.answer(error)
     else:
-        # Обновляем остаток запросов
         user_data = get_user(user_id)
         await message.answer(
             f"{response}\n\n"
@@ -484,13 +482,13 @@ async def health_check(request):
 
 async def self_ping():
     while True:
-        await asyncio.sleep(600)  # 10 минут
+        await asyncio.sleep(600)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(RENDER_URL, timeout=10) as resp:
                     print(f"[SELF-PING] {resp.status} - {datetime.now().strftime('%H:%M:%S')}")
-        except Exception as e:
-            print(f"[SELF-PING] Ошибка: {e}")
+        except:
+            pass
 
 async def start_web():
     app = web.Application()
