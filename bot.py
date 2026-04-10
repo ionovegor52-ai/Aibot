@@ -5,19 +5,13 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiohttp import web
-import socket
-import aiohttp.resolver
-
-# Принудительно используем Google DNS
-resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
-connector = aiohttp.TCPConnector(resolver=resolver)
 
 # ========== КОНФИГ ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-RENDER_URL = os.environ.get("RENDER_URL", "https://aibot.onrender.com")
+RENDER_URL = os.environ.get("RENDER_URL", "https://aibot-f7s6.onrender.com")
 
-# Простое хранилище (без БД)
+# Простое хранилище
 user_requests = {}
 
 # Инициализация
@@ -37,7 +31,7 @@ def main_menu():
 async def start(message: Message):
     user_id = message.from_user.id
     if user_id not in user_requests:
-        user_requests[user_id] = 5  # 5 бесплатных запросов
+        user_requests[user_id] = 5
     
     await message.answer(
         "🤖 *Простой ИИ-бот*\n\n"
@@ -64,15 +58,13 @@ async def show_balance(callback: types.CallbackQuery):
 async def chat(message: Message):
     user_id = message.from_user.id
     
-    # Проверяем лимит
     if user_id not in user_requests:
         user_requests[user_id] = 5
     
     if user_requests[user_id] <= 0:
-        await message.answer("❌ У вас закончились запросы! Бот только для демонстрации.")
+        await message.answer("❌ У вас закончились запросы!")
         return
     
-    # Отправляем запрос в OpenRouter
     await message.bot.send_chat_action(message.chat.id, "typing")
     
     headers = {
@@ -95,11 +87,7 @@ async def chat(message: Message):
                     answer = data["choices"][0]["message"]["content"]
                     user_requests[user_id] -= 1
                     left = user_requests[user_id]
-                    
-                    await message.answer(
-                        f"{answer}\n\n📊 Осталось запросов: {left}",
-                        parse_mode="Markdown"
-                    )
+                    await message.answer(f"{answer}\n\n📊 Осталось запросов: {left}")
                 else:
                     await message.answer(f"❌ Ошибка API: {resp.status}")
     except Exception as e:
@@ -114,9 +102,10 @@ async def ping():
         await asyncio.sleep(600)
         try:
             async with aiohttp.ClientSession() as session:
-                await session.get(RENDER_URL)
-        except:
-            pass
+                async with session.get(RENDER_URL) as resp:
+                    print(f"[SELF-PING] {resp.status}")
+        except Exception as e:
+            print(f"[SELF-PING] Ошибка: {e}")
 
 async def start_web():
     app = web.Application()
