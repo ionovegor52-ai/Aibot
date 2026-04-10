@@ -5,6 +5,12 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiohttp import web
+import socket
+import aiohttp.resolver
+
+# Принудительно используем Google DNS
+resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
+connector = aiohttp.TCPConnector(resolver=resolver)
 
 # ========== КОНФИГ ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
